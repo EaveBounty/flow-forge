@@ -1,0 +1,149 @@
+/* ═══════════════════════════════════════════════════════════════
+   edges.css — 「连线语义 + 运行可视化」模块样式（增量）
+   ─────────────────────────────────────────────────────────────
+   与 web/css/style.css（画布核心，app.js）配套：
+   · 端口/连线/标签/节点/面板/Toast 基础样式由 style.css 提供，本文件只做增量。
+   · 硬性规则：
+     1. 平时（未运行）连线一律实线（style.css 的 .wf-edge 默认 solid）。
+     2. 虚线 + 流动动画（stroke-dasharray + @keyframes wf-edge-flow）
+        只在运行中的 .is-flowing 状态出现（本文件定义，由 edges.js 加类）。
+     3. 运行结束后连线恢复实线，用 .is-flowed（渐变描边 + 柔光）
+        表示「已流动」，与普通结构实线区分，且不使用虚线。
+     4. 拖拽预览线（#temp-edge）使用实线，避免任何非运行虚线。
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 拖拽预览线：实线（遵守「非运行不使用虚线」） ── */
+#temp-edge {
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px rgba(10, 132, 255, 0.35));
+}
+
+/* ═══════════════════════ 运行可视化：连线状态 ═══════════════════════ */
+/* 流动中：虚线 + 流动动画（仅运行期间出现） */
+#edge-svg .wf-edge.is-flowing {
+  stroke: #00c2ff;
+  stroke-width: 2.8;
+  stroke-dasharray: 10 8;
+  animation: wf-edge-flow 0.8s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(0, 194, 255, 0.8));
+}
+@keyframes wf-edge-flow {
+  to { stroke-dashoffset: -18; }
+}
+
+/* 已流动：恢复实线，渐变描边 + 柔光（区别于结构实线，绝不使用虚线） */
+#edge-svg .wf-edge.is-flowed {
+  stroke: url(#wf-edge-grad);
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 3px rgba(0, 170, 255, 0.4));
+}
+
+/* 运行中的节点：呼吸灯 */
+.wf-run-ring {
+  position: absolute;
+  inset: -8px;
+  border-radius: 18px;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.15), 0 0 14px rgba(10, 132, 255, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+  animation: wf-breathe 1.3s var(--ease-in-out) infinite;
+}
+.wf-node.is-running .wf-run-ring { opacity: 1; }
+@keyframes wf-breathe {
+  0%, 100% { transform: scale(0.96); opacity: 0.35; }
+  50% { transform: scale(1.06); opacity: 0.95; }
+}
+
+/* ═══════════════════════ 运行可视化：结果气泡 ═══════════════════════ */
+.wf-node-bubble {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translate(-50%, -6px);
+  min-width: 172px;
+  max-width: 264px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+  font-size: 12px;
+  color: var(--text);
+  z-index: 8;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 0.3s var(--ease-out), transform 0.3s var(--ease-out);
+}
+.wf-node-bubble.is-in {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.wf-node-bubble.is-error {
+  border-color: rgba(255, 59, 48, 0.5);
+}
+
+.wf-bubble-head { display: flex; align-items: center; gap: 6px; }
+.wf-bubble-status {
+  flex: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; color: #fff;
+  background: linear-gradient(135deg, #34c759, #30d158);
+}
+.wf-node-bubble.is-error .wf-bubble-status { background: linear-gradient(135deg, #ff453a, #ff6961); }
+.wf-bubble-summary {
+  flex: 1;
+  font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wf-bubble-score {
+  flex: none;
+  font-size: 10.5px; font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.wf-bubble-score.is-good { background: rgba(52, 199, 89, 0.16); color: #1d9a3e; }
+.wf-bubble-score.is-mid { background: rgba(10, 132, 255, 0.12); color: var(--accent-deep); }
+.wf-bubble-score.is-low { background: rgba(255, 159, 10, 0.16); color: #c77a00; }
+
+.wf-bubble-detail {
+  margin-top: 0;
+  max-height: 0;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  transition: max-height 0.32s var(--ease-in-out), margin-top 0.32s var(--ease-in-out);
+}
+.wf-node-bubble.is-open .wf-bubble-detail {
+  max-height: 220px;
+  margin-top: 6px;
+}
+
+/* ═══════════════════════ 运行按钮状态（#btn-run） ═══════════════════════ */
+#btn-run.is-running {
+  opacity: 0.62;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ═══════════════════════ 无障碍：减弱动效 ═══════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  #edge-svg .wf-edge.is-flowing {
+    animation: none;
+  }
+  .wf-run-ring,
+  .wf-node-bubble {
+    animation: none !important;
+    transition: none !important;
+  }
+}

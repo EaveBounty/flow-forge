@@ -1,11 +1,61 @@
 # dsh-workflow-studio
 
-> DeepSeek Harness 会话界面的可编排工作流 —— **自由图模型**的可视化编排系统，让对话摆脱线性死板。
+> **独立前端项目**（FastAPI 后端 + 根路径 HTML 前端）。工作流智能编排画布：**一切由大模型根据流程上下文自动生成，用户只做选择，绝不打字。**
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![node](https://img.shields.io/badge/node-%3E%3D22.2-green)](#要求)
+[![python](https://img.shields.io/badge/python-%3E%3D3.10-blue)](#要求)
 
-把 DSH 的会话界面从「线性对话」升级为**可编排的自由图工作流**：**有且仅有一个启动节点**，其余为自由的图结构——可分支并行、可**从某节点返回到上一个节点再推进**（负反馈收敛），Loop 是**可含复杂内部图的循环体容器**。核心差异化：
+## 定位与核心理念
+
+本项目是一个**独立可运行**的工作流编排工具，不再作为 DSH 插件 bundle，而是**后端服务 + 浏览器前端**，DSH 或任何调用方通过其 REST API 驱动智能构建。
+
+**核心理念（用户反复强调，必须遵守）**：
+- **用户绝不打字**：画布上拖入的每个模块、连上的每条线，都由大模型根据流程上下文**自动生成候选描述**，用户只从多个候选中**挑一个**（标出推荐项）。
+- **连线自动语义**：连线自动生成「这条线的作用 + 两模块结合的作用 + 如何注入下一个模块的 Agent」，用户查看/确认。
+- **虚线只在运行后出现**：平时用实线表示结构关系；运行后才用虚线+流动动画表示数据在传输。
+- **运行必须真实可执行**：未配置模型时自动回退内置模板，绝不报错。
+
+## 快速开始
+
+```bash
+# 安装依赖
+pip install -r requirements.txt
+
+# 启动（根路径渲染 HTML 前端）
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8010
+```
+
+打开 `http://127.0.0.1:8010/` 即可使用画布。右上角「设置」填入模型厂商 / 模型 / API Key 后走真实大模型；不填则用内置模板（仍可完整使用）。
+
+## 目录
+
+- `backend/` — FastAPI 后端（`main.py` 入口；`llm.py` 生成逻辑；`settings.py` 设置存储；`routers/`）
+- `web/` — 前端（`index.html` + `css/` + `js/app.js` 画布核心 + `js/edges.js` 连线/运行）
+- `docs/API.md` — REST API 规范（供 DSH 调用）
+- `data/` — 本地设置与流程存储（已 gitignore）
+
+## REST API（摘要）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET  | `/` | 渲染前端 |
+| GET/PUT | `/api/settings` | 读取/保存模型设置 |
+| POST | `/api/settings/test` | 测试模型连接 |
+| POST | `/api/module/generate` | 生成模块候选 `{kind, ctx}` → `{candidates:[{title,description,prompt,recommended}]}` |
+| POST | `/api/edge/semantic` | 生成连线语义 `{from_module, to_module}` → `{label, description, injection}` |
+| POST | `/api/flows/run` | 运行流程 `{nodes, edges}` → `{results, outputs}` |
+| GET/POST | `/api/flows` | 保存/加载画布 |
+
+详见 [`docs/API.md`](docs/API.md)。
+
+---
+
+## 历史（旧版：DSH 插件）
+
+> 早期版本为 DeepSeek Harness 插件（`lib/`、`cordis.patch.yml`、`package.json`），
+> 后按用户要求彻底重构为独立前端项目。旧版代码保留在 `lib/`、`tests/` 等目录供参考，
+> 新版入口为 `backend/main.py` + `web/index.html`。
+
 
 - **对话生成流程**：在「工作流」标签内通过对话让 AI 从自然语言生成整张图（也可手工搭建，但不推荐）。
 - **自由图 + 负反馈**：分支并行、反馈环收敛、Loop 循环体嵌套子图，不是"单程票"。
@@ -104,3 +154,4 @@ npm run check   # 语法检查 + preflight 发布门禁
 - 2026 规划：按用户理念重构为**自由图模型 + 对话生成 + 原生并行执行 + 多对多 Review 智能去重 + Loop 循环体容器 + 分支化输出**；新增 `lib/tree.js`、`lib/compile.js`、`lib/execute.test.mjs`；新增 `/run`、`/generate`、`/review-suggest`、`/review-landing`、`/agents` 端点与原生引擎自挂载。
 - 2026 规划：安全加固（C1 路径穿越 / readBody 413 / 错误脱敏 / 列表上限）、深色模式与无障碍修复、**109 项测试全绿 + preflight PASS**；创造模式冒泡运行 + node:vm 真实执行验证插件正确可运行。
 - 2026-08-20 scoped 身份对齐：`cordis.patch.yml` 的 `name` 与 `lib/client.js` 的 `__ModuleLoader__.load` id 由 `dsh-workflow-studio` 改为规范名 `@eave_bounty/dsh-workflow-studio`（保留旧名别名注册兼容）；CSS tagId/data-plugin 同步；`scripts/preflight.mjs` 校验两个注册。修复 DSH profile 以 scoped 名安装时的 `Cannot find package 'dsh-workflow-studio'` 启动失败。
+- 2026 重构：独立 FastAPI 后端 + 根路径 HTML 前端；web/js/app.js 画布核心（菜单/拖拽/候选点选/连线渲染/设置/保存），web/js/edges.js 连线语义与运行可视化模块（接管 window.__wfRun：调 /api/flows/run 后按拓扑顺序逐节点呼吸灯 + 结果气泡 + 出边「流动中虚线动画 → 已流动渐变实线」，平时连线恒为实线）；web/css/edges.css 配套增量样式。

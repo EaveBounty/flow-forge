@@ -22,8 +22,15 @@ build/
 # Workflow runtime state — never commit user workspace data
 .dsh-workflow/
 
+# Local app state (settings.json may hold API keys; flows are user data)
+data/
+
 # Editor / OS
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
+
+# Python caches
+__pycache__/
+*.pyc

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <title>dsh-workflow-studio · 工作流画布</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230A84FF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='5' cy='6' r='2.5'/%3E%3Ccircle cx='19' cy='6' r='2.5'/%3E%3Ccircle cx='12' cy='18' r='2.5'/%3E%3Cpath d='M7.5 6h9M5 8.5 12 15.5M19 8.5 12 15.5'/%3E%3C/svg%3E" />
+  <script>
+    /* FastAPI 只把 web/ 挂在 /static，file:// 下需保持相对路径。
+       通过协议判断：http(s) 时让相对路径解析到 /static/，file:// 不加 base。 */
+    (function () {
+      if (location.protocol !== 'file:') {
+        var b = document.createElement('base');
+        b.href = '/static/';
+        document.head.appendChild(b);
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/edges.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ── 顶部工具栏（毛玻璃） ─────────────────────────────── -->
+  <header id="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.5 6h9M5 8.5 12 15.5M19 8.5 12 15.5"/></svg>
+      </span>
+      <div class="brand-text">
+        <h1>dsh-workflow-studio</h1>
+        <p id="flow-name">未命名流程</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="config-badge" class="badge badge-off" title="模型连接状态">
+        <span class="badge-dot"></span><span class="badge-text">未配置模型</span>
+      </span>
+      <button id="btn-save" class="tbtn tbtn-secondary" title="保存画布到 /api/flows">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+        保存画布
+      </button>
+      <button id="btn-run" class="tbtn tbtn-primary" title="运行流程（由 js/edges.js 接管 window.__wfRun）">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.87l13-7.5a1 1 0 0 0 0-1.74l-13-7.5A1 1 0 0 0 7 4.5z"/></svg>
+        运行
+      </button>
+      <button id="btn-settings" class="tbtn tbtn-icon" title="模型设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── 主区域：左侧菜单 + 抽屉 + 画布 + 信息面板 ─────────── -->
+  <div id="main">
+
+    <!-- 左侧菜单栏：Plan / Action / Review / Loop（形状、颜色、图标迥异） -->
+    <nav id="rail" aria-label="模块类型菜单">
+      <button class="rail-btn rail-btn--plan" data-kind="plan" title="计划类模块">
+        <span class="rail-shape">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/></svg>
+        </span>
+        <span class="rail-label">Plan</span>
+      </button>
+      <button class="rail-btn rail-btn--action" data-kind="action" title="执行类模块">
+        <span class="rail-shape">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.87l13-7.5a1 1 0 0 0 0-1.74l-13-7.5A1 1 0 0 0 7 4.5z"/></svg>
+        </span>
+        <span class="rail-label">Action</span>
+      </button>
+      <button class="rail-btn rail-btn--review" data-kind="review" title="审核类模块">
+        <span class="rail-shape">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+        <span class="rail-label">Review</span>
+      </button>
+      <button class="rail-btn rail-btn--loop" data-kind="loop" title="循环类模块">
+        <span class="rail-shape">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        </span>
+        <span class="rail-label">Loop</span>
+      </button>
+    </nav>
+
+    <!-- 模块抽屉（点击菜单按钮展开） -->
+    <aside id="drawer" class="drawer closed">
+      <div class="drawer-inner">
+        <div class="drawer-head">
+          <span class="drawer-title" id="drawer-title">模块</span>
+          <button class="drawer-close" id="drawer-close" title="收起抽屉">✕</button>
+        </div>
+        <div class="drawer-body" id="drawer-body"></div>
+      </div>
+    </aside>
+
+    <!-- 画布 -->
+    <div id="canvas-wrap">
+      <div id="canvas">
+        <svg id="edge-svg" aria-hidden="true"></svg>
+        <div id="edge-labels"></div>
+        <div id="nodes-layer"></div>
+        <div id="canvas-hint">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.5 6h9M5 8.5 12 15.5M19 8.5 12 15.5"/></svg>
+          <p>从左侧拖入模块，开始构建你的工作流</p>
+          <p class="sub">每个模块会由模型自动生成候选描述，你只需点选一个</p>
+        </div>
+        <div id="drop-hint" class="hidden">松开鼠标 · 放置模块</div>
+      </div>
+    </div>
+
+    <!-- 连线 / 模块信息面板 -->
+    <aside id="info-panel">
+      <div id="panel-empty" class="panel-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <p>点击画布上的模块或连线<br />查看详情与语义说明</p>
+      </div>
+      <div id="panel-node" class="panel-section hidden"></div>
+      <div id="panel-edge" class="panel-section hidden"></div>
+    </aside>
+  </div>
+</div>
+
+<!-- ── 候选选择弹层（拖入模块后弹出） ─────────────────────── -->
+<div id="picker-overlay" class="overlay hidden">
+  <div class="modal modal--picker" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+    <div class="modal-head">
+      <h3 class="modal-title" id="picker-title">选择模块描述</h3>
+      <button class="modal-close" id="picker-close" title="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="picker-note" class="picker-note hidden"></div>
+      <div id="picker-list" class="picker-list"></div>
+    </div>
+    <div class="modal-foot">
+      <span class="foot-hint">选择一个候选即可确定该模块，无需打字</span>
+      <button class="tbtn tbtn-ghost" id="picker-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 设置弹层（模型连接） ──────────────────────────────── -->
+<div id="settings-overlay" class="overlay hidden">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="modal-head">
+      <h3 class="modal-title" id="settings-title">设置 · 模型连接</h3>
+      <button class="modal-close" id="settings-close" title="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="settings-form" autocomplete="off">
+        <label class="field">
+          <span>模型厂商</span>
+          <select id="set-provider">
+            <option value="openai">OpenAI</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="openai-compatible">OpenAI 兼容 / 自定义</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Base URL（可选）</span>
+          <input id="set-base-url" type="text" placeholder="https://api.openai.com/v1" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>模型</span>
+          <input id="set-model" type="text" placeholder="gpt-4o-mini" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>API Key</span>
+          <span class="key-wrap">
+            <input id="set-api-key" type="password" placeholder="sk-…" spellcheck="false" autocomplete="new-password" />
+            <button type="button" id="key-toggle" title="显示 / 隐藏">👁</button>
+          </span>
+        </label>
+        <p class="settings-note">API Key 仅保存在本机 data/settings.json，不会上传到仓库。</p>
+      </form>
+    </div>
+    <div class="modal-foot">
+      <button class="tbtn tbtn-secondary" id="set-test">测试连接</button>
+      <span class="foot-spacer"></span>
+      <button class="tbtn tbtn-ghost" id="set-cancel">取消</button>
+      <button class="tbtn tbtn-primary" id="set-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────── -->
+<div id="toasts" aria-live="polite"></div>
+
+<script src="js/app.js" defer></script>
+<script src="js/edges.js" defer onerror="this.remove()"></script>
+</body>
+</html>
