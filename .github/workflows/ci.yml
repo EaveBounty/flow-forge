@@ -14,7 +14,10 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org/
-      - run: node --check lib/index.js && node --check lib/workflow.js && node --check lib/client.js
+      - run: node --check lib/index.js && node --check lib/workflow.js && node --check lib/client.js && node --check lib/tree.js && node --check lib/compile.js && node --check lib/semantics.js
       - run: node tests/workflow.test.mjs
+      - run: node tests/tree.test.mjs
+      - run: node tests/execute.test.mjs
+      - run: node tests/semantics.test.mjs
       - run: node scripts/preflight.mjs
       - run: npm pack --dry-run
