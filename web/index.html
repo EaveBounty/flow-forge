@@ -5,18 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light" />
   <title>dsh-workflow-studio · 工作流画布</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230A84FF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='5' cy='6' r='2.5'/%3E%3Ccircle cx='19' cy='6' r='2.5'/%3E%3Ccircle cx='12' cy='18' r='2.5'/%3E%3Cpath d='M7.5 6h9M5 8.5 12 15.5M19 8.5 12 15.5'/%3E%3C/svg%3E" />
+  <!-- 静态 base：http 下相对资源（css/js）解析到 /static/（FastAPI 把 web/ 挂在 /static）。
+       file:// 下会被下方脚本移除以保持本地相对路径。必须放在首个相对 URL 之前。 -->
+  <base href="/static/" />
   <script>
-    /* FastAPI 只把 web/ 挂在 /static，file:// 下需保持相对路径。
-       通过协议判断：http(s) 时让相对路径解析到 /static/，file:// 不加 base。 */
+    /* 仅 file:// 下移除 base，使相对路径在本地文件打开时也能工作。 */
     (function () {
-      if (location.protocol !== 'file:') {
-        var b = document.createElement('base');
-        b.href = '/static/';
-        document.head.appendChild(b);
-      }
+      if (location.protocol === 'file:') document.head.querySelector('base')?.remove();
     })();
   </script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230A84FF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='5' cy='6' r='2.5'/%3E%3Ccircle cx='19' cy='6' r='2.5'/%3E%3Ccircle cx='12' cy='18' r='2.5'/%3E%3Cpath d='M7.5 6h9M5 8.5 12 15.5M19 8.5 12 15.5'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="css/edges.css" />
 </head>
