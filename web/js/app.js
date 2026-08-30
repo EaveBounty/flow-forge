@@ -73,9 +73,9 @@
   };
   var FALLBACK_CANDIDATES = TEMPLATES; // 离线 / 未配置时的候选（后端同源模板）
 
-  /* 抽屉分节：哪个按钮打开哪些类型 */
+  /* 抽屉分节：哪个按钮打开哪些类型。起点（root）不在此列——起点由系统自动放置且唯一，用户不能从抽屉拖出第二个起点。 */
   var DRAWER_MAP = {
-    plan:   [ { label: '起点', kind: 'root' }, { label: '计划', kind: 'plan' } ],
+    plan:   [ { label: '计划', kind: 'plan' } ],
     action: [ { label: '执行', kind: 'action' } ],
     review: [ { label: '审核', kind: 'review' } ],
     loop:   [ { label: '循环', kind: 'loop' }, { label: '汇总', kind: 'summary' } ]
@@ -186,7 +186,16 @@
     var k = KINDS[node.kind] || KINDS.action;
     var selected = (node.id === state.selectedNodeId) ? ' selected' : '';
     var body = '';
-    if (node.status === 'generating') {
+    if (node.kind === 'root') {
+      // 起点：必须填写全局目标（goal），填完才允许拖入其它模块
+      body = '<span class="wf-node-desc">' + esc(node.description || '流程起点 · 请填写全局目标') + '</span>' +
+             '<div class="wf-goal-row">' +
+             '<label class="wf-goal-label" for="goal-' + node.id + '">目标</label>' +
+             '<input class="wf-goal-input" id="goal-' + node.id + '" data-goal="' + node.id +
+             '" value="' + esc(node.goal || '') + '" placeholder="本项目要做什么？" spellcheck="false" />' +
+             '</div>' +
+             (node.goal ? '' : '<span class="wf-goal-hint">填写目标后才能拖入其它模块</span>');
+    } else if (node.status === 'generating') {
       body = '<span class="wf-node-spinner"></span><span class="wf-node-gen">生成中…</span>';
     } else if (node.run) {
       body = '<span class="wf-node-run run-' + (node.run.status || 'done') + '">' + runChipHTML(node.run) + '</span>';
@@ -337,8 +346,75 @@
     }
   }
 
+  /* ── 起点 / 目标守卫 ─────────────────────────────────── */
+  function rootNode() {
+    for (var i = 0; i < state.nodes.length; i++) if (state.nodes[i].kind === 'root') return state.nodes[i];
+    return null;
+  }
+  function hasGoal() {
+    var r = rootNode();
+    return !!r && !!String(r.goal || '').trim();
+  }
+  // 是否允许添加一个非起点模块（必须已有起点且已填目标）
+  function canAddModule() {
+    if (!rootNode()) return false;
+    return hasGoal();
+  }
+  // 首次进入：若无任何节点，自动放置唯一起点
+  function ensureRootIfEmpty() {
+    if (state.nodes.length === 0) {
+      var node = {
+        id: uid('root'),
+        kind: 'root',
+        title: '流程起点',
+        description: '注入总体目标并启动流程。',
+        prompt: '你是流程启动器：接收总体目标，输出清晰的起点上下文。',
+        goal: '',
+        recommended: true,
+        x: 260 - NODE_W / 2,
+        y: 180 - NODE_H / 2,
+        status: 'ready'
+      };
+      state.nodes.push(node);
+      renderNodes();
+      updateEdges();
+      selectNode(node.id);
+    }
+  }
+
   /* ── 节点操作 ─────────────────────────────────────────── */
   function addNode(kind, tmpl, x, y) {
+    tmpl = tmpl || {};
+    // 起点唯一：已有起点则禁止再创建
+    if (kind === 'root') {
+      if (rootNode()) { toast('起点已存在，只能有一个起点', 'error'); return null; }
+      // 允许创建起点（首次/恢复时）
+      var rnode = {
+        id: uid('root'),
+        kind: 'root',
+        title: '流程起点',
+        description: tmpl.description || '注入总体目标并启动流程。',
+        prompt: tmpl.prompt || '',
+        goal: '',
+        recommended: !!tmpl.recommended,
+        x: Math.round(x),
+        y: Math.round(y),
+        status: 'ready'
+      };
+      state.nodes.push(rnode);
+      renderNodes();
+      updateEdges();
+      emit('node-added', rnode);
+      selectNode(rnode.id);
+      return rnode;
+    }
+    // 非起点模块：必须先有起点且已填目标
+    if (!hasGoal()) {
+      toast('请先在起点填写「目标」，再拖入其它模块', 'error');
+      ensureRootIfEmpty();
+      selectNode(rootNode() && rootNode().id);
+      return null;
+    }
     var node = {
       id: uid('node'),
       kind: kind,
@@ -371,7 +447,7 @@
     emit('node-removed', node);
   }
 
-  /* 生成上下文：plan（最近的 root/plan 祖先标题）+ upstream（直接上游标题列表） */
+  /* 生成上下文：plan（全局目标 root.goal 优先，其次最近的 plan 祖先）+ upstream（直接上游标题列表） */
   function buildGenCtx(node) {
     var upstreamTitles = [];
     var stack = [];
@@ -381,7 +457,8 @@
         if (n) { upstreamTitles.push(n.title); stack.push(e.source); }
       }
     });
-    var plan = '';
+    var r = rootNode();
+    var plan = (r && String(r.goal || '').trim()) || '';
     var seen = {};
     while (stack.length) {
       var id = stack.shift();
@@ -389,7 +466,7 @@
       seen[id] = true;
       var n = getNode(id);
       if (!n) continue;
-      if (n.kind === 'root' || n.kind === 'plan') { plan = n.title; break; }
+      if ((n.kind === 'plan' || n.kind === 'root') && !plan) { plan = n.goal || n.title; break; }
       state.edges.forEach(function (e) { if (e.target === id) stack.push(e.source); });
     }
     return { plan: plan, upstream: upstreamTitles };
@@ -854,6 +931,7 @@
         return {
           id: n.id, kind: n.kind, title: n.title,
           description: n.description || '', prompt: n.prompt || '',
+          goal: n.kind === 'root' ? (n.goal || '') : undefined,
           x: Math.round(n.x), y: Math.round(n.y)
         };
       }),
@@ -880,6 +958,7 @@
       return {
         id: n.id, kind: n.kind || 'action', title: n.title || '模块',
         description: n.description || '', prompt: n.prompt || '',
+        goal: (n.kind === 'root') ? (n.goal || '') : undefined,
         recommended: !!n.recommended,
         x: Number(n.x) || 80, y: Number(n.y) || 80,
         status: 'ready'
@@ -1008,12 +1087,31 @@
       if (e.target.closest('.port-in')) { selectNode(id); return; }
       startDragNode(id, e);
     });
+    // 起点目标（goal）输入：事件委托（renderNodes 会重建 DOM，故绑定在容器上）
+    el.nodesLayer.addEventListener('input', function (e) {
+      var inp = e.target.closest('.wf-goal-input');
+      if (!inp) return;
+      var id = inp.getAttribute('data-goal');
+      var n = getNode(id);
+      if (!n) return;
+      n.goal = inp.value;
+      emit('node-updated', n);
+    });
+    // 起点目标（goal）失去焦点：更新画布上的提示态（无需重渲染）
+    el.nodesLayer.addEventListener('blur', function (e) {
+      var inp = e.target.closest('.wf-goal-input');
+      if (!inp) return;
+      var id = inp.getAttribute('data-goal');
+      var n = getNode(id);
+      if (!n) return;
+      if (hasGoal()) toast('目标已设置，可以拖入其它模块了', 'success');
+      else toast('请填写全局目标后再拖入其它模块', 'info');
+    }, true);
     // 节点操作按钮
     el.nodesLayer.addEventListener('click', function (e) {
       var act = e.target.closest('.node-action');
       if (!act) return;
-      var nodeEl = act.closest('.wf-node');
-      if (!nodeEl) return;
+      var nodeEl = act.closest('.wf-node');      if (!nodeEl) return;
       var id = nodeEl.getAttribute('data-id');
       var n = getNode(id);
       if (!n) return;
@@ -1159,6 +1257,10 @@
     updateEdges();
     refreshConfigBadge();
     loadLastFlow();
+    // 首次进入（无任何节点）自动放置唯一起点，并提醒填写目标
+    if (state.nodes.length === 0) ensureRootIfEmpty();
+    // 若加载了已有流程但没有起点，也自动补一个（保证画布始终有唯一起点）
+    if (!rootNode()) ensureRootIfEmpty();
     // 健康检查（静默，后端不可达不影响画布）
     fetch('/api/health').catch(function () { /* 忽略 */ });
     emit('ready');
