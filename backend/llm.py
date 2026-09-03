@@ -272,3 +272,100 @@ def normalize_candidate(c: dict[str, Any]) -> dict[str, Any]:
         "prompt": str(c.get("prompt") or ""),
         "recommended": bool(c.get("recommended")),
     }
+
+
+# ── L1 一键起草：从 goal 起草整张图（拓扑 + 每节点 + 每边语义）──────────
+_NODE_W, _GAP = 220, 80
+
+
+def _offline_draft(goal: str) -> dict[str, Any]:
+    """离线起草：按通用 Plan→Action→Review→Summary 骨架，为给定目标生成一张可运行的图。"""
+    short = (goal[:24] + "…") if len(str(goal)) > 24 else str(goal)
+    cx = 300
+    cy = 0
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+
+    def add(kind: str, title: str, desc: str, prompt: str, recommended: bool = True) -> str:
+        nonlocal cy
+        nid = f"n{len(nodes) + 1}"
+        cy += _NODE_W + _GAP
+        nodes.append({
+            "id": nid, "kind": kind, "title": title, "description": desc,
+            "prompt": prompt, "recommended": recommended, "goal": None,
+            "x": cx, "y": cy,
+        })
+        return nid
+
+    root_id = add("root", "流程起点", f"启动围绕「{short}」的工作流。", "你是流程启动器：接收总体目标，输出清晰的起点上下文。")
+    nodes[0]["goal"] = goal
+
+    plan_id = add("plan", "拆解计划", f"把「{short}」拆成可分步、可分工的执行计划。", "你是产品/技术负责人：把目标拆解成清晰、可分步、可分工的计划。")
+    edges.append({"id": "e1", "source": root_id, "target": plan_id, "data": {"intent": "context", "label": "注入目标", "description": f"把项目目标「{short}」交给计划拆解，作为其输入。", "injection": f"下面是本项目总目标「{short}」，请据此产出执行计划。"}})
+
+    act1 = add("action", "执行调研", f"围绕「{short}」收集事实与数据。", "你是资深调研员：收集与目标相关的事实、数据与资料，产出结构化调研结果。")
+    edges.append({"id": "e2", "source": plan_id, "target": act1, "data": {"intent": "artifact", "label": "按计划执行", "description": "依据计划分工，开始执行首个动作：调研。", "injection": "把上方计划中与你相关的分工注入本 Agent，执行调研。"}})
+
+    act2 = add("action", "产出初稿", f"基于调研产出「{short}」的初稿。", "你是起草者：综合调研材料产出高质量初稿，供后续审核完善。")
+    edges.append({"id": "e3", "source": act1, "target": act2, "data": {"intent": "artifact", "label": "调研→初稿", "description": "调研成果作为初稿的素材输入。", "injection": "把调研结果注入本 Agent，作为初稿的事实依据。"}})
+
+    rev_id = add("review", "审核把关", f"对「{short}」的初稿做正确性与完整性审核。", "你是审核员：检查产出的正确性、完整性与风险，给出可执行的改进意见。", recommended=False)
+    edges.append({"id": "e4", "source": act2, "target": rev_id, "data": {"intent": "artifact", "label": "初稿送审", "description": "初稿交给审核把关，两者形成产出→审核链路。", "injection": "把初稿完整注入本审核 Agent，请针对内容给出结论与改进意见。"}})
+
+    sum_id = add("summary", "汇总产出", "聚合各阶段产出，形成最终结构化交付。", "你是分析师：聚合上游产出，提炼结构化结论与建议。")
+    edges.append({"id": "e5", "source": rev_id, "target": sum_id, "data": {"intent": "context", "label": "汇总结论", "description": "审核后的结果汇总为最终交付。", "injection": "把审核通过的结果注入本汇总 Agent，产出最终交付。"}})
+
+    return {"nodes": nodes, "edges": edges, "goal": goal}
+
+
+def draft_flow(goal: str) -> dict[str, Any]:
+    """从全局目标起草一张图。优先 LLM（产出真实拓扑），失败回退离线模板。"""
+    goal = (goal or "").strip()
+    if settings.is_configured():
+        system = (
+            "你是工作流架构师。根据用户给出的一个全局目标，设计一张完整可执行的工作流图。"
+            "输出 JSON：{nodes, edges}。节点字段：id(kind=root唯一起点并带 goal 字段，其余 kind∈"
+            "plan|action|review|loop|summary)、title、description、prompt（给该模块 Agent 的完整提示词）、"
+            "recommended。边字段：id、source、target、data.label（短标签）、data.description（两模块结合作用）、"
+            "data.injection（如何把上游输出注入下游提示词）。控制在 4~8 个节点，逻辑连贯、可跑通。只输出 JSON。"
+        )
+        try:
+            text = _call_openai_compatible(
+                [{"role": "system", "content": _design_system(system)}, {"role": "user", "content": f"全局目标: {goal}"}],
+                temperature=0.7,
+                max_tokens=1400,
+            )
+            draft = _extract_json(text)
+            nodes, edges = draft.get("nodes"), draft.get("edges")
+            if isinstance(nodes, list) and nodes and isinstance(edges, list):
+                norm_nodes = []
+                for i, n in enumerate(nodes):
+                    if not isinstance(n, dict):
+                        continue
+                    nid = str(n.get("id") or f"n{i + 1}")
+                    norm_nodes.append({
+                        "id": nid,
+                        "kind": str(n.get("kind") or "action"),
+                        "title": str(n.get("title") or "模块"),
+                        "description": str(n.get("description") or ""),
+                        "prompt": str(n.get("prompt") or ""),
+                        "recommended": bool(n.get("recommended", True)),
+                        "goal": (str(n.get("goal") or "") if n.get("kind") == "root" else None),
+                        "x": 300 + (i % 3) * 260,
+                        "y": 180 + (i // 3) * 320,
+                    })
+                norm_edges = [{
+                    "id": str(e.get("id") or f"e{i + 1}"),
+                    "source": str(e.get("source")),
+                    "target": str(e.get("target")),
+                    "data": {
+                        "intent": str((e.get("data") or {}).get("intent") or "context"),
+                        "label": str((e.get("data") or {}).get("label") or "连接"),
+                        "description": str((e.get("data") or {}).get("description") or ""),
+                        "injection": str((e.get("data") or {}).get("injection") or ""),
+                    },
+                } for i, e in enumerate(edges) if isinstance(e, dict) and e.get("source") and e.get("target")]
+                return {"nodes": norm_nodes, "edges": norm_edges, "goal": goal}
+        except LLMError:
+            pass
+    return _offline_draft(goal)

@@ -442,6 +442,7 @@
     if (!r) return null;
     r.goal = String(text == null ? '' : text).trim();
     renderNodes();
+    refreshDraftButton();
     emit('node-updated', r);
     return r;
   }
@@ -985,6 +986,7 @@
     renderNodes();
     updateEdges();
     renderPanel();
+    refreshDraftButton();
     emit('flow-loaded', flow);
   }
   async function loadLastFlow() {
@@ -1065,6 +1067,87 @@
     defaultRun();
   }
 
+  /* ── 一键起草（L1）：goal → 整图草案 → 审阅裁剪 → 应用 ── */
+  function refreshDraftButton() {
+    if (!el.btnDraft) return;
+    var on = hasGoal();
+    el.btnDraft.disabled = !on;
+    el.btnDraft.title = on ? '根据起点目标起草整张工作流图' : '先在起点填写「目标」后可用';
+  }
+  var _draftData = null; // 暂存当前草案（nodes/edges），供 apply 用
+  function openDraft() {
+    if (!hasGoal()) { toast('请先填写全局目标', 'info'); return; }
+    var r = rootNode();
+    var goal = (r && r.goal) || '';
+    el.draftGoal.textContent = '目标：' + goal;
+    el.draftList.innerHTML = '';
+    _draftData = null;
+    el.draftOverlay.classList.remove('hidden');
+    el.draftList.textContent = '正在起草…';
+    api('/api/flows/draft', { method: 'POST', body: { goal: goal } })
+      .then(function (d) {
+        if (!d || !d.ok || !d.nodes) { toast('起草失败', 'error'); closeDraft(); return; }
+        _draftData = d;
+        renderDraftList(d.nodes, d.edges);
+      })
+      .catch(function (e) { toast('起草失败：' + e.message, 'error'); closeDraft(); });
+  }
+  function renderDraftList(nodes, edges) {
+    var bySrc = {};
+    edges.forEach(function (e) { (bySrc[e.source] = bySrc[e.source] || []).push(e); });
+    el.draftList.innerHTML = '';
+    var any = false;
+    nodes.forEach(function (n, i) {
+      if (n.kind === 'root') return; // root 已存在，不重复起草
+      any = true;
+      var out = bySrc[n.id] || [];
+      var card = document.createElement('div');
+      card.className = 'draft-item' + (n.recommended ? ' is-rec' : '');
+      card.innerHTML =
+        '<label class="draft-check"><input type="checkbox" data-did="' + i + '" checked />' +
+        '<span class="draft-kind k-' + esc(n.kind) + '">' + esc(n.kind.toUpperCase()) + '</span>' +
+        '<span class="draft-main"><span class="draft-title">' + (n.recommended ? '<i class="rec-badge">推荐</i>' : '') + esc(n.title) + '</span>' +
+        '<span class="draft-desc">' + esc(n.description || '') + '</span></span></label>' +
+        (out.length ? '<div class="draft-edgeout">' + out.map(function (e) {
+          return '→ ' + esc((e.data && e.data.label) || '连接下游');
+        }).join('；') + '</div>' : '');
+      el.draftList.appendChild(card);
+    });
+    if (!any) {
+      el.draftList.innerHTML = '<p class="draft-empty">草案为空，换个目标试试。</p>';
+    }
+  }
+  function draftSetAll(on) {
+    var boxes = el.draftList.querySelectorAll('input[type=checkbox][data-did]');
+    for (var i = 0; i < boxes.length; i++) boxes[i].checked = on;
+  }
+  function closeDraft() {
+    el.draftOverlay.classList.add('hidden');
+  }
+  function applyDraft() {
+    if (!_draftData || !_draftData.nodes) return;
+    var keep = {};
+    var boxes = el.draftList.querySelectorAll('input[type=checkbox][data-did]:checked');
+    for (var i = 0; i < boxes.length; i++) keep[Number(boxes[i].getAttribute('data-did'))] = true;
+    var nodes = _draftData.nodes.filter(function (n, idx) {
+      return n.kind === 'root' || keep[idx];
+    });
+    var ids = {};
+    nodes.forEach(function (n) { ids[n.id] = true; });
+    var edges = (_draftData.edges || []).filter(function (e) { return ids[e.source] && ids[e.target]; });
+    // 保留现有 root.goal，重排画布
+    var g = rootNode();
+    var goal = (g && g.goal) || '';
+    var baseX = 80, baseY = 60;
+    var flowNodes = nodes.map(function (n, i) {
+      return { id: n.id, kind: n.kind, title: n.title, description: n.description || '', prompt: n.prompt || '', goal: n.kind === 'root' ? goal : undefined, recommended: !!n.recommended, x: baseX + (i % 3) * 300, y: baseY + Math.floor(i / 3) * 340, status: 'ready' };
+    });
+    renderFlow({ id: null, name: '', nodes: flowNodes, edges: edges });
+    closeDraft();
+    toast('已应用起草：' + nodes.length + ' 个模块，' + edges.length + ' 条连线', 'success');
+    emit('draft-applied', { nodes: nodes.length, edges: edges.length });
+  }
+
   /* ── 事件接线 ─────────────────────────────────────────── */
   function wireToolbar() {
     el.btnSettings.addEventListener('click', openSettings);
@@ -1072,6 +1155,17 @@
       saveCanvas().catch(function (e) { toast('保存失败：' + e.message, 'error'); });
     });
     el.btnRun.addEventListener('click', clickRun);
+    if (el.btnDraft) {
+      el.btnDraft.addEventListener('click', openDraft);
+      el.draftClose.addEventListener('click', closeDraft);
+      el.draftCancel.addEventListener('click', closeDraft);
+      el.draftAll.addEventListener('click', function () { draftSetAll(true); });
+      el.draftNone.addEventListener('click', function () { draftSetAll(false); });
+      el.draftApply.addEventListener('click', applyDraft);
+      // 点击遮罩空白关闭
+      el.draftOverlay.addEventListener('click', function (e) { if (e.target === el.draftOverlay) closeDraft(); });
+      refreshDraftButton();
+    }
   }
 
   function wireRail() {
@@ -1107,6 +1201,7 @@
       var n = getNode(id);
       if (!n) return;
       n.goal = inp.value;
+      refreshDraftButton();
       emit('node-updated', n);
     });
     // 起点目标（goal）失去焦点：更新画布上的提示态（无需重渲染）
@@ -1116,6 +1211,7 @@
       var id = inp.getAttribute('data-goal');
       var n = getNode(id);
       if (!n) return;
+      refreshDraftButton();
       if (hasGoal()) toast('目标已设置，可以拖入其它模块了', 'success');
       else toast('请填写全局目标后再拖入其它模块', 'info');
     }, true);
@@ -1220,7 +1316,16 @@
     el.configBadgeText = el.configBadge.querySelector('.badge-text');
     el.btnSave = document.getElementById('btn-save');
     el.btnRun = document.getElementById('btn-run');
+    el.btnDraft = document.getElementById('btn-draft');
     el.btnSettings = document.getElementById('btn-settings');
+    el.draftOverlay = document.getElementById('draft-overlay');
+    el.draftGoal = document.getElementById('draft-goal');
+    el.draftList = document.getElementById('draft-list');
+    el.draftAll = document.getElementById('draft-all');
+    el.draftNone = document.getElementById('draft-none');
+    el.draftCancel = document.getElementById('draft-cancel');
+    el.draftClose = document.getElementById('draft-close');
+    el.draftApply = document.getElementById('draft-apply');
     el.drawer = document.getElementById('drawer');
     el.drawerTitle = document.getElementById('drawer-title');
     el.drawerClose = document.getElementById('drawer-close');
@@ -1313,6 +1418,13 @@
         .then(function (d) { return d.candidates || []; });
     },
     applyCandidate: applyCandidate,
+
+    // 一键起草（L1）
+    openDraft: openDraft,
+    applyDraft: applyDraft,
+    closeDraft: closeDraft,
+    draftSetAll: draftSetAll,
+    refreshDraftButton: refreshDraftButton,
 
     // 运行状态（edges.js 用）
     setRunState: setRunState,

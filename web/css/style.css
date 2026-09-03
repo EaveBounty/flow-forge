@@ -846,3 +846,53 @@ svg { display: block; }
   .rail-shape { width: 48px; height: 48px; }
   .brand-text p { display: none; }
 }
+
+/* ── 一键起草审阅弹层 ────────────────────────────────────── */
+.modal--draft { width: min(680px, calc(100vw - 48px)); }
+.draft-goal {
+  margin: 0 0 8px; font-size: 13px; color: var(--text-2);
+  background: linear-gradient(180deg, rgba(10,132,255,.07), rgba(10,132,255,.02));
+  border: 1px solid rgba(10,132,255,.18);
+  border-radius: 10px; padding: 9px 13px; line-height: 1.5;
+  word-break: break-word;
+}
+.draft-hint { font-size: 12px; color: var(--text-3); margin: 4px 0 12px; line-height: 1.5; }
+.draft-list { padding-bottom: 8px; }
+.draft-empty { color: var(--text-3); font-size: 13px; text-align: center; padding: 24px 0; }
+.draft-item {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 11px 14px;
+  margin-bottom: 10px;
+  background: #fff;
+  transition: border-color .16s, background .16s;
+}
+.draft-item.is-rec { border-color: rgba(10,132,255,.35); background: linear-gradient(180deg, rgba(10,132,255,.05), rgba(10,132,255,.01)); }
+.draft-check { display: flex; align-items: flex-start; gap: 11px; cursor: pointer; }
+.draft-check input[type=checkbox] {
+  width: 17px; height: 17px; margin-top: 2px; accent-color: var(--accent); cursor: pointer; flex: none;
+}
+.draft-kind {
+  flex: none;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .04em;
+  padding: 3px 7px; border-radius: 6px; margin-top: 2px;
+  color: #fff;
+}
+.draft-kind.k-root { background: #5b5f66; }
+.draft-kind.k-plan { background: linear-gradient(135deg,#5856D6,#3634A3); }
+.draft-kind.k-action { background: linear-gradient(135deg,#FF3B30,#C7201B); }
+.draft-kind.k-review { background: linear-gradient(135deg,#0A84FF,#0060DF); }
+.draft-kind.k-loop { background: linear-gradient(135deg,#FF9F0A,#D46B08); }
+.draft-kind.k-summary { background: linear-gradient(135deg,#30B0C7,#0E7C8C); }
+.draft-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.draft-title { font-size: 13.5px; font-weight: 650; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.rec-badge {
+  font-size: 9.5px; font-weight: 700; font-style: normal;
+  color: #fff; background: linear-gradient(135deg,#0A84FF,#0060DF);
+  border-radius: 5px; padding: 1px 6px; flex: none;
+}
+.draft-desc { font-size: 12px; color: var(--text-2); line-height: 1.45; }
+.draft-edgeout {
+  margin: 8px 0 0 28px; font-size: 11.5px; color: var(--text-3); line-height: 1.5;
+  border-left: 2px solid var(--border); padding-left: 10px;
+}

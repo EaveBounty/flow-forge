@@ -40,6 +40,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
         保存画布
       </button>
+      <button id="btn-draft" class="tbtn tbtn-secondary" disabled title="根据起点目标，由模型一键起草整张工作流图（可逐项裁剪）">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        起草
+      </button>
       <button id="btn-run" class="tbtn tbtn-primary" title="运行流程（由 js/edges.js 接管 window.__wfRun）">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.87l13-7.5a1 1 0 0 0 0-1.74l-13-7.5A1 1 0 0 0 7 4.5z"/></svg>
         运行
@@ -133,6 +137,28 @@
     <div class="modal-foot">
       <span class="foot-hint">选择一个候选即可确定该模块，无需打字</span>
       <button class="tbtn tbtn-ghost" id="picker-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 一键起草审阅弹层（goal → 整图草案，逐项裁剪后应用） ────── -->
+<div id="draft-overlay" class="overlay hidden">
+  <div class="modal modal--draft" role="dialog" aria-modal="true" aria-labelledby="draft-title">
+    <div class="modal-head">
+      <h3 class="modal-title" id="draft-title">一键起草 · 审阅工作流</h3>
+      <button class="modal-close" id="draft-close" title="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="draft-goal" id="draft-goal"></p>
+      <div class="draft-hint">勾选要保留的模块，未勾选的模块及其连线会被剔除；模型已标注推荐项。</div>
+      <div id="draft-list" class="draft-list"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="tbtn tbtn-secondary" id="draft-all">全选</button>
+      <button class="tbtn tbtn-secondary" id="draft-none">全不选</button>
+      <span class="foot-spacer"></span>
+      <button class="tbtn tbtn-ghost" id="draft-cancel">取消</button>
+      <button class="tbtn tbtn-primary" id="draft-apply">应用所选</button>
     </div>
   </div>
 </div>

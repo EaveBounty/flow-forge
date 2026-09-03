@@ -40,6 +40,10 @@ class RunFlowRequest(BaseModel):
     edges: list[dict[str, Any]] = []
 
 
+class DraftFlowRequest(BaseModel):
+    goal: str = ""
+
+
 def _topo(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[str]:
     ids = [n["id"] for n in nodes]
     indeg = {i: 0 for i in ids}
@@ -90,6 +94,13 @@ async def save_flow(req: SaveFlowRequest) -> dict[str, Any]:
     flow = {"id": flow_id, "name": req.name or flow_id, "nodes": req.nodes, "edges": req.edges}
     _file(flow_id).write_text(json.dumps(flow, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True, "id": flow_id}
+
+
+@router.post("/flows/draft")
+async def draft_flow(req: DraftFlowRequest) -> dict[str, Any]:
+    """L1：从全局目标起草一整张可运行的图（拓扑 + 节点描述 + 边语义）。"""
+    draft = llm.draft_flow(req.goal or "")
+    return {"ok": True, **draft}
 
 
 @router.post("/flows/run")
