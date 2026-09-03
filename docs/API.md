@@ -7,6 +7,7 @@
 - 服务：`python -m uvicorn backend.main:app --host 127.0.0.1 --port 8010`
 - 根路径：`http://127.0.0.1:8010/`（渲染 HTML 前端）
 - OpenAPI：`http://127.0.0.1:8010/docs`（FastAPI 自动生成）
+- **Agent 操作手册**：仓库根 [`AGENTS.md`](../AGENTS.md)（Mode B/Skill——安装、启动、端到端操作协议）
 
 ---
 
