@@ -1,8 +1,8 @@
 """设置存储：模型厂商 / 模型 / API Key。
 
 API Key 存于本地 data/settings.json，仅本机服务读取。绝不写入仓库/日志。
-支持环境变量覆盖（便于 DSH 或 CI 注入）：
-  DSH_WORKFLOW_PROVIDER / DSH_WORKFLOW_MODEL / DSH_WORKFLOW_API_KEY
+支持环境变量覆盖（便于外部调用方或 CI 注入）：
+  FLOW_FORGE_PROVIDER / FLOW_FORGE_MODEL / FLOW_FORGE_API_KEY
 """
 from __future__ import annotations
 
@@ -48,10 +48,10 @@ def get_settings() -> dict[str, Any]:
     s = _read()
     # 环境变量优先（用于无盘注入）
     return {
-        "provider": os.environ.get("DSH_WORKFLOW_PROVIDER", s.get("provider", "")),
-        "base_url": os.environ.get("DSH_WORKFLOW_BASE_URL", s.get("base_url", "")),
-        "model": os.environ.get("DSH_WORKFLOW_MODEL", s.get("model", "")),
-        "api_key": os.environ.get("DSH_WORKFLOW_API_KEY", s.get("api_key", "")),
+        "provider": os.environ.get("FLOW_FORGE_PROVIDER", s.get("provider", "")),
+        "base_url": os.environ.get("FLOW_FORGE_BASE_URL", s.get("base_url", "")),
+        "model": os.environ.get("FLOW_FORGE_MODEL", s.get("model", "")),
+        "api_key": os.environ.get("FLOW_FORGE_API_KEY", s.get("api_key", "")),
     }
 
 

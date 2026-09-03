@@ -1,12 +1,5 @@
-# Dependencies — never commit (link: deps resolve from the DSH profile)
-node_modules/
-pnpm-lock.yaml
-package-lock.json
-yarn.lock
-
 # Local / runtime
 *.log
-npm-debug.log*
 
 # Secrets — never commit
 .secrets/
@@ -14,13 +7,9 @@ npm-debug.log*
 .env.*
 !*.env.example
 
-# Build artifacts (this repo is a hand-checked-in source bundle; add a build dir if one is introduced)
+# Build artifacts
 dist/
 build/
-*.tsbuildinfo
-
-# Workflow runtime state — never commit user workspace data
-.dsh-workflow/
 
 # Local app state (settings.json may hold API keys; flows are user data)
 data/
@@ -34,3 +23,8 @@ Thumbs.db
 # Python caches
 __pycache__/
 *.pyc
+*.pyo
+
+# Virtual env
+.venv/
+venv/

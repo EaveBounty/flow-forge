@@ -1,4 +1,4 @@
-# Real-browser end-to-end interaction test for dsh-workflow-studio frontend
+# Real-browser end-to-end interaction test for flow-forge frontend
 from playwright.sync_api import sync_playwright
 
 CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"

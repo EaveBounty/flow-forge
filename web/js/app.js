@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════
-   dsh-workflow-studio · web/js/app.js
+   flow-forge · web/js/app.js
    画布核心逻辑（零依赖，原生 JS + SVG）。
 
    核心理念：

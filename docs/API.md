@@ -1,8 +1,8 @@
-# dsh-workflow-studio — REST API 规范
+# flow-forge — REST API 规范
 
-> 独立前端项目（FastAPI 后端 + 根路径 HTML 前端）。DSH 或任何调用方通过本 API
-> 驱动工作流的智能构建。**核心理念：一切模块/连线语义由大模型按流程上下文自动生成，
-> 用户只做选择，绝不打字。**
+> 人机通用的独立工作流设计引擎（FastAPI 后端 + 根路径 HTML 前端）。DSH 或任何调用方
+> （含 Agent）通过本 API 驱动工作流的智能构建。**核心理念：一切模块/连线语义由大模型
+> 按流程上下文自动生成，用户/调用方只做审阅裁切，绝不打字。**
 
 - 服务：`python -m uvicorn backend.main:app --host 127.0.0.1 --port 8010`
 - 根路径：`http://127.0.0.1:8010/`（渲染 HTML 前端）
@@ -77,10 +77,10 @@ resp: { "ok": true,
 
 ---
 
-## 前端核心理念落地（DSH 通过 API 智能构建）
+## 核心理念落地（前端 UI 与外部 Agent 都能驱动"智能构建"）
 
-DSH 可这样驱动本服务完成"智能构建"：
-1. 调 `POST /api/module/generate` 获得某类模块的候选描述 → 展示给用户选。
+任意调用方（前端 Web UI，或 DSH/Claude 等 Agent）可这样驱动本服务完成"智能构建"：
+1. 调 `POST /api/module/generate` 获得某类模块的候选描述 → 展示给用户/调用方选。
 2. 调 `POST /api/edge/semantic` 获得两模块连线的语义 → 标注连线、注入下游。
 3. 调 `POST /api/flows/run` 执行 → 回填结果。
 

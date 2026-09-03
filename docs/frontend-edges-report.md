@@ -1,4 +1,4 @@
-# dsh-workflow-studio — 前端「连线语义 + 运行可视化」模块实现报告
+# flow-forge — 前端「连线语义 + 运行可视化」模块实现报告
 
 > 对应文件：`web/js/edges.js`（实现）+ `web/css/edges.css`（样式）+ `web/index.html`（追加 edges.css 引入）。
 > 配套：`web/js/app.js`（画布核心，并行子代理构建）、`docs/API.md`（REST 规范）、`backend/routers/flows.py`、`backend/llm.py`。
