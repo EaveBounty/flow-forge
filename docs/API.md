@@ -66,6 +66,17 @@ resp: { "ok": true,
 ```
 按拓扑顺序执行，每条边的 `injection` 注入下游上下文。
 
+### 4.（L1）一键起草整张图
+```
+POST /api/flows/draft
+body: { "goal": "写一份季度财报分析" }
+resp: { "ok": true, "goal": "…",
+        "nodes": [ {id,kind,title,description,prompt,recommended,goal?,x,y}, ... ],
+        "edges": [ {id,source,target,data:{label,description,injection}}, ... ] }
+```
+从全局目标起草一张**可运行的完整图**（root 带 goal + 若干模块 + 边语义，逻辑连贯）。
+未配置模型时回退内置 Plan→Action→Review→Summary 骨架。前端以此做"一键起草 + 逐项审阅裁剪"。
+
 ---
 
 ## 画布持久化

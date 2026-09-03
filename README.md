@@ -15,6 +15,7 @@ flow-forge 是一个**独立可运行**的工作流编排工具：**后端服务
 - **虚线只在运行后出现**：平时用实线表示结构关系；运行后才用虚线+流动动画表示数据在传输。
 - **运行必须真实可执行**：未配置模型时自动回退内置模板，绝不报错。
 - **起点必填 goal**：唯一起点（root）必须先填项目总目标，在填满前禁止拖入其它任何模块；起点不出现在左侧菜单，也无法拖出第二个。
+- **一键起草（L1）**：填好 goal 后点「起草」，大模型按流程上下文**起草整张图**（拓扑 + 每模块描述 + 每条连线语义），用户在审阅弹层里逐项勾选保留——**结构由 AI 起草、人做审阅裁切**，最大化增幅。
 
 ## 双模式（一个引擎，两个消费入口）
 
@@ -64,6 +65,7 @@ FLOW_FORGE_PROVIDER / FLOW_FORGE_BASE_URL / FLOW_FORGE_MODEL / FLOW_FORGE_API_KE
 | POST | `/api/settings/test` | 测试模型连接 |
 | POST | `/api/module/generate` | 生成模块候选 `{kind, ctx}` → `{candidates:[...]}` |
 | POST | `/api/edge/semantic` | 生成连线语义 `{from_module, to_module}` → `{label, description, injection}` |
+| POST | `/api/flows/draft` | (L1) 从 goal 起草整张图 `{goal}` → `{nodes, edges}` |
 | POST | `/api/flows/run` | 运行流程 `{nodes, edges}` → `{results, outputs}` |
 | GET/POST | `/api/flows` | 保存/加载画布 |
 
@@ -88,3 +90,5 @@ FLOW_FORGE_PROVIDER / FLOW_FORGE_BASE_URL / FLOW_FORGE_MODEL / FLOW_FORGE_API_KE
 - 2026-08 大重构（v0.4.0 起）：彻底改为**独立前端项目**（FastAPI 后端 + 根路径 HTML 前端），删除 DSH 插件架构。web/js/app.js 画布核心（菜单/拖拽/候选点选/连线渲染/设置/保存），web/js/edges.js 连线语义与运行可视化（虚线只在运行时出现）。
 - 2026 起点强制（goal-gate）：唯一起点必须先填 goal，填目标前禁止拖入其它模块。
 - 2026 更名 flow-forge：仓库从 dsh 身份彻底解绑，删除旧 DSH 插件源码（lib/、tests/、cordis.patch.yml、package.json）与旧版设计/审计文档；CI 改为 Python。
+- 2026 双模式 + 配置层：集中 JSON 工程配置（`flowforge.config.json`，可提交、无密钥；api_key 只落 gitignored `data/settings.json`，Web 设置页与编辑 JSON 等价）；新增 AGENTS.md（Mode B/Skill：Agent 安装/启动/端到端操作协议）。
+- 2026 L1 一键起草：`POST /api/flows/draft` + 前端「起草」按钮与审阅裁剪弹层——填好 goal 后由模型起草整张图，用户逐项勾选保留并应用。
