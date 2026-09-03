@@ -122,7 +122,17 @@ const fail = (data) => ({ ok: false, status: 500, json: () => Promise.resolve(da
     return Promise.resolve(fail({ ok: false, error: 'no stub' }));
   });
 
-  const n1 = wf.addNode('root', { title: '流程起点', description: 'd', prompt: 'p' }, 100, 100);
+  // 起点在 init 时自动创建（goal-gate）。先验证 auto-root，再设目标。
+  const roots = wf.getNodes().filter((n) => n.kind === 'root');
+  if (roots.length !== 1) throw new Error('init 后应恰好有 1 个起点，实际 ' + roots.length);
+  // 未填目标前，拖入 action 应被拦截
+  const blocked = wf.addNode('action', { title: '执行', description: 'd', prompt: 'p' }, 300, 300);
+  if (blocked !== null) throw new Error('未填目标时应拦截 action');
+  // 设目标
+  wf.setGoal('写一份季度财报分析');
+
+  // action 触发候选生成
+  const n1 = wf.addNode('action', { title: '执行任务', description: 'd', prompt: 'p' }, 150, 200);
   if (n1.status !== 'generating') throw new Error('addNode 后应为 generating');
   await new Promise((r) => setTimeout(r, 20));
   if (calls.filter((c) => c.startsWith('/api/module/generate')).length !== 1) throw new Error('未调用 module/generate');
@@ -151,11 +161,11 @@ const fail = (data) => ({ ok: false, status: 500, json: () => Promise.resolve(da
   const data = wf.getFlowData();
   if (!data.nodes.length || !data.edges.length) throw new Error('getFlowData 为空');
   wf.loadFlow({ id: 'flow-x', name: '测试', nodes: data.nodes, edges: data.edges });
-  if (wf.getNodes().length !== 2) throw new Error('loadFlow 失败');
+  if (wf.getNodes().length !== 3) throw new Error('loadFlow 失败: ' + wf.getNodes().length);
 
   wf.removeNode(n1.id);
   wf.removeEdge(edge.id);
-  if (wf.getNodes().length !== 1 || wf.getEdges().length !== 0) throw new Error('删除失败');
+  if (wf.getNodes().length !== 2 || wf.getEdges().length !== 0) throw new Error('删除失败: nodes=' + wf.getNodes().length + ' edges=' + wf.getEdges().length);
 
   // 设置保存（api_key 留空但有 has_key → 不应清空）
   documentStub.getElementById('set-provider').value = 'deepseek';
@@ -174,6 +184,7 @@ const fail = (data) => ({ ok: false, status: 500, json: () => Promise.resolve(da
     if (url === '/api/module/generate') return Promise.reject(new Error('network down'));
     return Promise.resolve(fail({ ok: false, error: 'no stub' }));
   });
+  B.wf.setGoal('离线目标');
   const nb = B.wf.addNode('plan', { title: '拆解计划', description: 'd', prompt: 'p' }, 200, 200);
   await new Promise((r) => setTimeout(r, 20));
   if (els['picker-overlay'].classList.contains('hidden')) throw new Error('离线回退后弹层未显示');
@@ -192,6 +203,7 @@ const fail = (data) => ({ ok: false, status: 500, json: () => Promise.resolve(da
   let runCalled = false, semCalled = false;
   C.sandbox.window.__wfRun = function () { runCalled = true; };
   C.sandbox.window.__wfEdgeSemantic = function () { semCalled = true; return Promise.resolve({ intent: 'x', label: '自定义标签', description: 'd', injection: 'i' }); };
+  C.wf.setGoal('覆盖钩子目标');
   const c1 = C.wf.addNode('action', { title: '执行', description: 'd', prompt: 'p' }, 100, 100);
   const c2 = C.wf.addNode('action', { title: '执行2', description: 'd', prompt: 'p' }, 400, 100);
   await new Promise((r) => setTimeout(r, 20));

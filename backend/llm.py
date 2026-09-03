@@ -165,6 +165,12 @@ def _call_openai_compatible(messages: list[dict[str, str]], *, temperature: floa
         raise LLMError("LLM 响应缺少 choices[0].message.content") from e
 
 
+def _design_system(base: str) -> str:
+    """把工程级 system_prompt（flowforge.config.json）前置到设计类调用的系统提示词。"""
+    sp = (settings.get_settings().get("system_prompt") or "").strip()
+    return f"{sp}\n\n{base}" if sp else base
+
+
 def _extract_json(text: str) -> Any:
     text = text.strip()
     # 去 markdown 代码块
@@ -198,7 +204,7 @@ def generate_module_candidates(kind: str, ctx: dict[str, Any]) -> list[dict[str,
         user = f"模块类型: {kind}\n流程上下文(JSON): {json.dumps(ctx, ensure_ascii=False)}"
         try:
             text = _call_openai_compatible(
-                [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                [{"role": "system", "content": _design_system(system)}, {"role": "user", "content": user}],
                 temperature=0.7,
                 max_tokens=800,
             )
@@ -222,7 +228,7 @@ def generate_edge_semantics(from_m: dict[str, Any], to_m: dict[str, Any]) -> dic
         user = f"上游模块: {json.dumps(from_m, ensure_ascii=False)}\n下游模块: {json.dumps(to_m, ensure_ascii=False)}"
         try:
             text = _call_openai_compatible(
-                [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                [{"role": "system", "content": _design_system(system)}, {"role": "user", "content": user}],
                 temperature=0.6,
                 max_tokens=400,
             )

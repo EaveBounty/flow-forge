@@ -434,6 +434,18 @@
     return node;
   }
 
+  /* 设置全局目标（唯一起点）。无起点则自动创建；写入后重渲染并广播。
+     供测试、会话式编辑（L2）与 API 调用方使用。 */
+  function setGoal(text) {
+    ensureRootIfEmpty();
+    var r = rootNode();
+    if (!r) return null;
+    r.goal = String(text == null ? '' : text).trim();
+    renderNodes();
+    emit('node-updated', r);
+    return r;
+  }
+
   function removeNode(id) {
     var node = getNode(id);
     if (!node) return;
@@ -1283,6 +1295,7 @@
     // 节点
     addNode: addNode,
     removeNode: removeNode,
+    setGoal: setGoal,
     selectNode: selectNode,
     deselectAll: deselectAll,
     renderNodes: renderNodes,
