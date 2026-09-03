@@ -1073,12 +1073,21 @@
     var on = hasGoal();
     el.btnDraft.disabled = !on;
     el.btnDraft.title = on ? '根据起点目标起草整张工作流图' : '先在起点填写「目标」后可用';
+    if (el.cmdBar) el.cmdBar.classList.toggle('hidden', !on);
   }
   var _draftData = null; // 暂存当前草案（nodes/edges），供 apply 用
+  function setDraftHead(mode, extra) {
+    if (el.draftTitle) el.draftTitle.textContent = mode === 'tweak' ? '说即改 · 预览修改' : '一键起草 · 审阅工作流';
+    var hint = el.draftOverlay.querySelector && el.draftOverlay.querySelector('.draft-hint');
+    if (hint) hint.textContent = mode === 'tweak'
+      ? '根据你的修改意图，模型提议如下改动。勾选要保留的模块（未勾选会被剔除），确认后应用。'
+      : '勾选要保留的模块，未勾选的模块及其连线会被剔除；模型已标注推荐项。';
+  }
   function openDraft() {
     if (!hasGoal()) { toast('请先填写全局目标', 'info'); return; }
     var r = rootNode();
     var goal = (r && r.goal) || '';
+    setDraftHead('draft');
     el.draftGoal.textContent = '目标：' + goal;
     el.draftList.innerHTML = '';
     _draftData = null;
@@ -1091,6 +1100,35 @@
         renderDraftList(d.nodes, d.edges);
       })
       .catch(function (e) { toast('起草失败：' + e.message, 'error'); closeDraft(); });
+  }
+  function openTweak(intent) {
+    intent = (intent || '').trim();
+    if (!intent) { toast('请先输入一句修改意图', 'info'); return; }
+    if (!hasGoal()) { toast('请先填写全局目标', 'info'); return; }
+    var r = rootNode();
+    var goal = (r && r.goal) || '';
+    var cur = serialize();
+    setDraftHead('tweak');
+    el.draftGoal.textContent = '修改意图：' + intent;
+    el.draftList.innerHTML = '';
+    _draftData = null;
+    el.draftOverlay.classList.remove('hidden');
+    el.draftList.textContent = '正在理解你的修改意图…';
+    api('/api/flows/tweak', { method: 'POST', body: { goal: goal, nodes: cur.nodes, edges: cur.edges, intent: intent } })
+      .then(function (d) {
+        if (!d || !d.ok || !d.nodes) { toast('处理失败', 'error'); closeDraft(); return; }
+        _draftData = d;
+        var hint = el.draftOverlay.querySelector && el.draftOverlay.querySelector('.draft-hint');
+        if (hint && d.summary) hint.textContent = '模型建议：' + d.summary;
+        renderDraftList(d.nodes, d.edges);
+      })
+      .catch(function (e) { toast('处理失败：' + e.message, 'error'); closeDraft(); });
+  }
+  function submitCmd() {
+    if (!el.cmdInput) return;
+    var v = el.cmdInput.value;
+    openTweak(v);
+    el.cmdInput.value = '';
   }
   function renderDraftList(nodes, edges) {
     var bySrc = {};
@@ -1164,6 +1202,10 @@
       el.draftApply.addEventListener('click', applyDraft);
       // 点击遮罩空白关闭
       el.draftOverlay.addEventListener('click', function (e) { if (e.target === el.draftOverlay) closeDraft(); });
+      if (el.cmdSend) {
+        el.cmdSend.addEventListener('click', submitCmd);
+        el.cmdInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submitCmd(); } });
+      }
       refreshDraftButton();
     }
   }
@@ -1320,12 +1362,16 @@
     el.btnSettings = document.getElementById('btn-settings');
     el.draftOverlay = document.getElementById('draft-overlay');
     el.draftGoal = document.getElementById('draft-goal');
+    el.draftTitle = document.getElementById('draft-title');
     el.draftList = document.getElementById('draft-list');
     el.draftAll = document.getElementById('draft-all');
     el.draftNone = document.getElementById('draft-none');
     el.draftCancel = document.getElementById('draft-cancel');
     el.draftClose = document.getElementById('draft-close');
     el.draftApply = document.getElementById('draft-apply');
+    el.cmdBar = document.getElementById('cmd-bar');
+    el.cmdInput = document.getElementById('cmd-input');
+    el.cmdSend = document.getElementById('cmd-send');
     el.drawer = document.getElementById('drawer');
     el.drawerTitle = document.getElementById('drawer-title');
     el.drawerClose = document.getElementById('drawer-close');
@@ -1425,6 +1471,10 @@
     closeDraft: closeDraft,
     draftSetAll: draftSetAll,
     refreshDraftButton: refreshDraftButton,
+
+    // 说即改（L2）
+    openTweak: openTweak,
+    submitCmd: submitCmd,
 
     // 运行状态（edges.js 用）
     setRunState: setRunState,

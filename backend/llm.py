@@ -369,3 +369,142 @@ def draft_flow(goal: str) -> dict[str, Any]:
         except LLMError:
             pass
     return _offline_draft(goal)
+
+
+# ── L2 会话说即改：意图 → 图谱修订（可撤销预览）──────────────────────
+def _offline_tweak(goal: str, nodes: list[dict[str, Any]], edges: list[dict[str, Any]], intent: str) -> dict[str, Any]:
+    """离线启发式改图：在动作模块后插入一个审核阶段（把该模块下游改经新审核），或按名删除节点。
+
+    保证返回连通且可运行；不匹配任何规则时返回原图 + 提示，绝不报错。
+    """
+    intent = (intent or "").strip()
+    nodes = [dict(n) for n in nodes]
+    edges = [dict(e) for e in edges]
+
+    # 规则1：插入审核阶段
+    add_review = any(w in intent for w in ("审核", "把关", "检查", "加一步", "review", "质检", "验收"))
+    # 规则2：删除节点
+    del_kw = None
+    for w in ("删掉", "删除", "去掉", "移除", "不要"):
+        if w in intent:
+            rest = intent.split(w, 1)[1].strip()
+            del_kw = rest.split(" ")[0].strip() or None
+            break
+
+    changed = False
+    summary = ""
+    if del_kw:
+        removed = [n for n in nodes if n["kind"] != "root" and del_kw in (n.get("title") or "") or (del_kw and del_kw in (n.get("title") or ""))]
+        removed_ids = {n["id"] for n in removed}
+        if removed_ids:
+            nodes = [n for n in nodes if n["id"] not in removed_ids]
+            edges = [e for e in edges if e["source"] not in removed_ids and e["target"] not in removed_ids]
+            changed = True
+            summary = f"已删除 {len(removed_ids)} 个与「{del_kw}」相关的模块。"
+    if add_review and not changed:
+        # 选最后一个 action 模块作为锚点，把它的下游改经新 review
+        anchor = None
+        for n in reversed(nodes):
+            if n["kind"] == "action":
+                anchor = n
+                break
+        if anchor is None:
+            for n in reversed(nodes):
+                if n["kind"] in ("plan", "summary"):
+                    anchor = n
+                    break
+        if anchor is not None:
+            outs = [e for e in edges if e["source"] == anchor["id"]]
+            out_targs = [e["target"] for e in outs]
+            new_id = f"n{len(nodes) + 1}"
+            new_rev = {
+                "id": new_id, "kind": "review", "title": "审核把关",
+                "description": f"对「{anchor.get('title')}」的产出做正确性审核，达标后才继续下游。",
+                "prompt": "你是审核员：检查上游产出的正确性、完整性与风险，输出结论；不达标则返回改进意见。",
+                "recommended": True, "goal": None,
+                "x": anchor.get("x", 100) + 40, "y": anchor.get("y", 100) + 260,
+            }
+            nodes.append(new_rev)
+            # 锚点 → 新审核
+            edges = [e for e in edges if not (e["source"] == anchor["id"])]
+            edges.append({"id": f"e{len(edges) + 1}", "source": anchor["id"], "target": new_id, "data": {"intent": "artifact", "label": "产出送审", "description": f"把「{anchor.get('title')}」产出交给审核把关。", "injection": f"把上方「{anchor.get('title')}」的完整产出注入本审核 Agent，请据此给出结论与改进意见。"}})
+            # 新审核 → 原有下游（合并）
+            seen = set()
+            for t in out_targs:
+                if t in seen:
+                    continue
+                seen.add(t)
+                edges.append({"id": f"e{len(edges) + 1}", "source": new_id, "target": t, "data": {"intent": "context", "label": "放行到下游", "description": "审核通过后放行到下游处理。", "injection": f"该阶段已通过「{new_rev.get('title')}」审核，继续处理："}})
+            if not out_targs:
+                summary = f"已在「{anchor.get('title')}」后插入「{new_rev.get('title')}」审核阶段。"
+            else:
+                summary = f"已在「{anchor.get('title')}」后插入「{new_rev.get('title')}」审核；其下游改经该审核放行。"
+            changed = True
+    if not changed:
+        summary = "未识别到可安全执行的修改意图（离线模式支持：在动作后加审核/把关/检查，或按名称删除某模块）。已保持原图不变。"
+
+    return {"nodes": nodes, "edges": edges, "goal": goal, "summary": summary, "changed": changed}
+
+
+def tweak_flow(goal: str, nodes: list[dict[str, Any]], edges: list[dict[str, Any]], intent: str) -> dict[str, Any]:
+    """L2：根据一句自然语言意图修订当前图。优先 LLM，失败回退离线启发式（绝不报错）。"""
+    intent = (intent or "").strip()
+    goal = (goal or "").strip()
+    if settings.is_configured():
+        system = (
+            "你是工作流编辑助手。用户想对一张已有的工作流图做一次修改（说即改）。"
+            "输入当前图 nodes/edges 与一句意图。输出修订后的完整图 + 变更说明：JSON {nodes, edges, summary, changed}。"
+            "节点字段：id、kind(root=唯一起点带goal, 其它 plan|action|review|loop|summary)、title、description、"
+            "prompt、recommended、x、y。边字段：id、source、target、data{label,description,injection}。"
+            "尽量只改动与意图相关的部分，保留其它不变；keep root 及连线 id 稳定。summary 用一句人话说明改了啥。只输出 JSON。"
+        )
+        try:
+            text = _call_openai_compatible(
+                [{"role": "system", "content": _design_system(system)}, {
+                    "role": "user",
+                    "content": f"全局目标: {goal}\n当前图 nodes(JSON): {json.dumps(nodes, ensure_ascii=False)}\n"
+                               f"当前图 edges(JSON): {json.dumps(edges, ensure_ascii=False)}\n修改意图: {intent}"}],
+                temperature=0.4,
+                max_tokens=1400,
+            )
+            r = _extract_json(text)
+            rn, re = r.get("nodes"), r.get("edges")
+            if isinstance(rn, list) and rn and isinstance(re, list):
+                idx = {n.get("id"): i for i, n in enumerate(nodes)}
+                norm_nodes = []
+                for i, n in enumerate(rn):
+                    if not isinstance(n, dict):
+                        continue
+                    nid = str(n.get("id") or f"n{i + 1}")
+                    old = nodes[idx[nid]] if nid in idx else {}
+                    norm_nodes.append({
+                        "id": nid,
+                        "kind": str(n.get("kind") or old.get("kind") or "action"),
+                        "title": str(n.get("title") or old.get("title") or "模块"),
+                        "description": str(n.get("description") if n.get("description") is not None else old.get("description", "")),
+                        "prompt": str(n.get("prompt") if n.get("prompt") is not None else old.get("prompt", "")),
+                        "recommended": bool(n.get("recommended", True)),
+                        "goal": (str(n.get("goal") or "") if n.get("kind") == "root" or (old and old.get("kind") == "root") else None),
+                        "x": int(n.get("x") if n.get("x") is not None else old.get("x", 100)),
+                        "y": int(n.get("y") if n.get("y") is not None else old.get("y", 100)),
+                    })
+                ids = {n["id"] for n in norm_nodes}
+                norm_edges = []
+                for i, e in enumerate(re):
+                    if not isinstance(e, dict) or e.get("source") not in ids or e.get("target") not in ids:
+                        continue
+                    norm_edges.append({
+                        "id": str(e.get("id") or f"e{i + 1}"),
+                        "source": str(e.get("source")), "target": str(e.get("target")),
+                        "data": {
+                            "intent": str((e.get("data") or {}).get("intent") or "context"),
+                            "label": str((e.get("data") or {}).get("label") or "连接"),
+                            "description": str((e.get("data") or {}).get("description") or ""),
+                            "injection": str((e.get("data") or {}).get("injection") or ""),
+                        },
+                    })
+                return {"nodes": norm_nodes, "edges": norm_edges, "goal": goal,
+                        "summary": str(r.get("summary") or "已按你的要求修改工作流。"), "changed": True}
+        except LLMError:
+            pass
+    return _offline_tweak(goal, nodes, edges, intent)

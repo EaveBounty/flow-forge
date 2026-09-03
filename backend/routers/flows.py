@@ -44,6 +44,13 @@ class DraftFlowRequest(BaseModel):
     goal: str = ""
 
 
+class TweakFlowRequest(BaseModel):
+    goal: str = ""
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    intent: str = ""
+
+
 def _topo(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[str]:
     ids = [n["id"] for n in nodes]
     indeg = {i: 0 for i in ids}
@@ -101,6 +108,13 @@ async def draft_flow(req: DraftFlowRequest) -> dict[str, Any]:
     """L1：从全局目标起草一整张可运行的图（拓扑 + 节点描述 + 边语义）。"""
     draft = llm.draft_flow(req.goal or "")
     return {"ok": True, **draft}
+
+
+@router.post("/flows/tweak")
+async def tweak_flow(req: TweakFlowRequest) -> dict[str, Any]:
+    """L2：根据一句自然语言意图修订当前图 → 返回修订后的图 + 变更说明（可撤销预览）。"""
+    out = llm.tweak_flow(req.goal or "", req.nodes or [], req.edges or [], req.intent or "")
+    return {"ok": True, **out}
 
 
 @router.post("/flows/run")

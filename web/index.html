@@ -207,6 +207,16 @@
   </div>
 </div>
 
+<!-- ── 说即改指令条（L2）：一句话修订当前图，可撤销预览 ── -->
+<div id="cmd-bar" class="hidden" role="search">
+  <span class="cmd-ico" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  </span>
+  <input id="cmd-input" type="text" placeholder="说一句修改意图，例如：在动作后加一步审核把关 / 删掉某模块 / 把审核改严一点"
+         spellcheck="false" autocomplete="off" />
+  <button id="cmd-send" class="tbtn tbtn-primary">说即改</button>
+</div>
+
 <!-- ── Toast ─────────────────────────────────────────────── -->
 <div id="toasts" aria-live="polite"></div>
 

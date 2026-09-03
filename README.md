@@ -16,6 +16,7 @@ flow-forge 是一个**独立可运行**的工作流编排工具：**后端服务
 - **运行必须真实可执行**：未配置模型时自动回退内置模板，绝不报错。
 - **起点必填 goal**：唯一起点（root）必须先填项目总目标，在填满前禁止拖入其它任何模块；起点不出现在左侧菜单，也无法拖出第二个。
 - **一键起草（L1）**：填好 goal 后点「起草」，大模型按流程上下文**起草整张图**（拓扑 + 每模块描述 + 每条连线语义），用户在审阅弹层里逐项勾选保留——**结构由 AI 起草、人做审阅裁切**，最大化增幅。
+- **会话说即改（L2）**：底部指令条输入一句修改意图（如"在动作后加一步审核把关"），大模型把意图翻译成**图谱修订**，弹层预览 + 可撤销，确认后应用——改动降至一句话，仍保持全图可视可控。
 
 ## 双模式（一个引擎，两个消费入口）
 
@@ -66,6 +67,7 @@ FLOW_FORGE_PROVIDER / FLOW_FORGE_BASE_URL / FLOW_FORGE_MODEL / FLOW_FORGE_API_KE
 | POST | `/api/module/generate` | 生成模块候选 `{kind, ctx}` → `{candidates:[...]}` |
 | POST | `/api/edge/semantic` | 生成连线语义 `{from_module, to_module}` → `{label, description, injection}` |
 | POST | `/api/flows/draft` | (L1) 从 goal 起草整张图 `{goal}` → `{nodes, edges}` |
+| POST | `/api/flows/tweak` | (L2) 会话说即改：意图→修订图 `{intent, nodes, edges}` → `{nodes, summary}` |
 | POST | `/api/flows/run` | 运行流程 `{nodes, edges}` → `{results, outputs}` |
 | GET/POST | `/api/flows` | 保存/加载画布 |
 
@@ -92,3 +94,4 @@ FLOW_FORGE_PROVIDER / FLOW_FORGE_BASE_URL / FLOW_FORGE_MODEL / FLOW_FORGE_API_KE
 - 2026 更名 flow-forge：仓库从 dsh 身份彻底解绑，删除旧 DSH 插件源码（lib/、tests/、cordis.patch.yml、package.json）与旧版设计/审计文档；CI 改为 Python。
 - 2026 双模式 + 配置层：集中 JSON 工程配置（`flowforge.config.json`，可提交、无密钥；api_key 只落 gitignored `data/settings.json`，Web 设置页与编辑 JSON 等价）；新增 AGENTS.md（Mode B/Skill：Agent 安装/启动/端到端操作协议）。
 - 2026 L1 一键起草：`POST /api/flows/draft` + 前端「起草」按钮与审阅裁剪弹层——填好 goal 后由模型起草整张图，用户逐项勾选保留并应用。
+- 2026 L2 会话说即改：`POST /api/flows/tweak` + 底部「说即改」指令条——一句意图→图谱修订→可撤销预览→应用；离线启发式（插审核/删模块）绝不报错。
