@@ -51,6 +51,13 @@ class TweakFlowRequest(BaseModel):
     intent: str = ""
 
 
+class SelfReviewRequest(BaseModel):
+    goal: str = ""
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    results: dict[str, Any] = {}
+
+
 def _topo(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[str]:
     ids = [n["id"] for n in nodes]
     indeg = {i: 0 for i in ids}
@@ -114,6 +121,13 @@ async def draft_flow(req: DraftFlowRequest) -> dict[str, Any]:
 async def tweak_flow(req: TweakFlowRequest) -> dict[str, Any]:
     """L2：根据一句自然语言意图修订当前图 → 返回修订后的图 + 变更说明（可撤销预览）。"""
     out = llm.tweak_flow(req.goal or "", req.nodes or [], req.edges or [], req.intent or "")
+    return {"ok": True, **out}
+
+
+@router.post("/flows/selfreview")
+async def self_review(req: SelfReviewRequest) -> dict[str, Any]:
+    """L3：运行后自省——对比 goal 与结果，返回薄弱点 + 可执行改进意图（可喂给 tweak）。"""
+    out = llm.self_review(req.goal or "", req.nodes or [], req.edges or [], req.results or {})
     return {"ok": True, **out}
 
 

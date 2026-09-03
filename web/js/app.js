@@ -1130,6 +1130,43 @@
     openTweak(v);
     el.cmdInput.value = '';
   }
+
+  /* ── 运行后自省（L3）：跑完 → 建议条 → 可一键喂给 tweak ── */
+  var _reviewSuggestion = '';
+  function showReviewBar(assessment, suggestion) {
+    if (!el.reviewBar) return;
+    _reviewSuggestion = suggestion || '';
+    el.reviewText.textContent = assessment || '';
+    if (el.reviewApply) el.reviewApply.classList.toggle('hidden', !_reviewSuggestion);
+    el.reviewBar.classList.remove('hidden');
+  }
+  function hideReviewBar() {
+    if (el.reviewBar) el.reviewBar.classList.add('hidden');
+    _reviewSuggestion = '';
+  }
+  function applyReviewSuggestion() {
+    var sug = _reviewSuggestion;
+    if (!sug) return;
+    hideReviewBar();
+    openTweak(sug);
+  }
+  async function runSelfReview(results, outputs) {
+    var r = rootNode();
+    var goal = (r && r.goal) || '';
+    if (!hasGoal() || !results) return;
+    var cur = serialize();
+    try {
+      var d = await api('/api/flows/selfreview', {
+        method: 'POST',
+        body: { goal: goal, nodes: cur.nodes, edges: cur.edges, results: results },
+      });
+      if (d && d.ok) {
+        var assessment = d.assessment || '';
+        if ((d.weak || []).length) showReviewBar(assessment, d.suggestion_intent || '');
+        else hideReviewBar();
+      }
+    } catch (e) { /* 静默：自省失败不影响运行 */ }
+  }
   function renderDraftList(nodes, edges) {
     var bySrc = {};
     edges.forEach(function (e) { (bySrc[e.source] = bySrc[e.source] || []).push(e); });
@@ -1205,6 +1242,10 @@
       if (el.cmdSend) {
         el.cmdSend.addEventListener('click', submitCmd);
         el.cmdInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submitCmd(); } });
+      }
+      if (el.reviewClose) {
+        el.reviewClose.addEventListener('click', hideReviewBar);
+        el.reviewApply.addEventListener('click', applyReviewSuggestion);
       }
       refreshDraftButton();
     }
@@ -1372,6 +1413,10 @@
     el.cmdBar = document.getElementById('cmd-bar');
     el.cmdInput = document.getElementById('cmd-input');
     el.cmdSend = document.getElementById('cmd-send');
+    el.reviewBar = document.getElementById('review-bar');
+    el.reviewText = document.getElementById('review-text');
+    el.reviewApply = document.getElementById('review-apply');
+    el.reviewClose = document.getElementById('review-close');
     el.drawer = document.getElementById('drawer');
     el.drawerTitle = document.getElementById('drawer-title');
     el.drawerClose = document.getElementById('drawer-close');
@@ -1475,6 +1520,12 @@
     // 说即改（L2）
     openTweak: openTweak,
     submitCmd: submitCmd,
+
+    // 运行后自省（L3）
+    runSelfReview: runSelfReview,
+    showReviewBar: showReviewBar,
+    hideReviewBar: hideReviewBar,
+    applyReviewSuggestion: applyReviewSuggestion,
 
     // 运行状态（edges.js 用）
     setRunState: setRunState,

@@ -508,3 +508,91 @@ def tweak_flow(goal: str, nodes: list[dict[str, Any]], edges: list[dict[str, Any
         except LLMError:
             pass
     return _offline_tweak(goal, nodes, edges, intent)
+
+
+# ── L3 运行后自省：结果 vs goal → 薄弱点 + 改进建议（闭环到 L2 tweak）──
+def _offline_self_review(goal: str, nodes: list[dict[str, Any]], edges: list[dict[str, Any]], results: dict[str, Any]) -> dict[str, Any]:
+    """离线自省：检查每条 review 的分数、动作是否有下游 review、root goal 是否空等，给出可执行建议。"""
+    weak: list[dict[str, Any]] = []
+    by_id = {n["id"]: n for n in nodes}
+    titles = {n["id"]: (n.get("title") or "模块") for n in nodes}
+
+    # 1) 低分 review
+    for nid, res in (results or {}).items():
+        node = by_id.get(nid)
+        if not node or node.get("kind") != "review":
+            continue
+        score = (res or {}).get("score")
+        if isinstance(score, (int, float)) and score < 0.85:
+            weak.append({"node_id": nid, "severity": "high",
+                         "issue": f"「{titles.get(nid)}」评分较低（{score:.2f}），产出可能未达标。"})
+    # 2) 没有任何 review 的 action
+    rev_ids = {n["id"] for n in nodes if n["kind"] == "review"}
+    for n in nodes:
+        if n["kind"] != "action":
+            continue
+        has_rev_down = any(e.get("source") == n["id"] and e.get("target") in rev_ids for e in edges)
+        if not has_rev_down:
+            weak.append({"node_id": n["id"], "severity": "medium",
+                         "issue": f"「{titles.get(n['id'])}」的执行结果没有经过任何审核把关。"})
+    # 3) 汇总/终点检查：若没有 summary 类节点，提醒补一个交付汇总
+    if not any(n["kind"] == "summary" for n in nodes):
+        weak.append({"node_id": None, "severity": "low", "issue": "图中没有「汇总产出」节点，各分支结果未聚合为最终交付。"})
+    # 4) root goal
+    for n in nodes:
+        if n.get("kind") == "root" and not (n.get("goal") or "").strip():
+            weak.append({"node_id": n["id"], "severity": "low", "issue": "起点尚未填写全局目标，运行上下文不明确。"})
+
+    if not weak:
+        return {"weak": [], "assessment": "运行结果整体达标，未发现明显薄弱点。", "suggestion_intent": ""}
+
+    # 拼一条可喂给 tweak 的意图（优先修高/中危）
+    w = sorted(weak, key=lambda x: {"high": 0, "medium": 1, "low": 2}.get(x["severity"], 3))
+    assessment = "运行完成，发现以下可改进点：\n" + "\n".join("- " + w_["issue"] for w_ in weak)
+    first = w[0]
+    if first["severity"] == "high" and first["node_id"]:
+        suggestion_intent = f"把「{titles.get(first['node_id'], '')}」这个审核改得更严一点"
+    elif any(x["severity"] == "medium" for x in weak):
+        suggestion_intent = "给缺少审核把关的动作模块补上审核阶段"
+    else:
+        suggestion_intent = "给流程补一个汇总产出的模块，把各分支结果聚合成最终交付"
+    return {"weak": weak, "assessment": assessment, "suggestion_intent": suggestion_intent}
+
+
+def self_review(goal: str, nodes: list[dict[str, Any]], edges: list[dict[str, Any]], results: dict[str, Any]) -> dict[str, Any]:
+    """L3：运行后对比 goal 与结果，指出薄弱点并给出可执行的改进意图（可再喂给 tweak）。"""
+    goal = (goal or "").strip()
+    try:
+        if settings.is_configured():
+            system = (
+                "你是工作流质量审阅员。一次流程刚运行完。给你全局目标、图结构与每个节点的运行结果，"
+                "请对比目标判断结果质量。输出 JSON：{weak:[{node_id,severity(high|medium|low),issue}], "
+                "assessment(总体评估一段话), suggestion_intent(一句可让工作流编辑器执行的修改意图，用于弥补最紧要的薄弱点)}。"
+                "没有薄弱点则 weak 为空数组、suggestion_intent 为空串。只输出 JSON。"
+            )
+            user = (f"全局目标: {goal}\n图 nodes: {json.dumps(nodes, ensure_ascii=False)}\n"
+                    f"图 edges: {json.dumps(edges, ensure_ascii=False)}\n"
+                    f"运行结果 results: {json.dumps(results, ensure_ascii=False)[:3000]}")
+            text = _call_openai_compatible(
+                [{"role": "system", "content": _design_system(system)}, {"role": "user", "content": user}],
+                temperature=0.3, max_tokens=600,
+            )
+            r = _extract_json(text)
+            wl = r.get("weak")
+            if isinstance(wl, list):
+                weak = []
+                for x in wl[:8]:
+                    if isinstance(x, dict):
+                        weak.append({
+                            "node_id": x.get("node_id"),
+                            "severity": str(x.get("severity") or "low") if str(x.get("severity") or "") in ("high", "medium", "low") else "low",
+                            "issue": str(x.get("issue") or ""),
+                        })
+                return {
+                    "weak": weak,
+                    "assessment": str(r.get("assessment") or "运行完成。"),
+                    "suggestion_intent": str(r.get("suggestion_intent") or ""),
+                }
+    except LLMError:
+        pass
+    return _offline_self_review(goal, nodes, edges, results)

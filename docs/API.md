@@ -89,6 +89,19 @@ resp: { "ok": true,
 把一句自然语言意图翻译成图谱修订，返回**修订后的完整图 + 人话变更说明**，供前端做可撤销预览。
 离线回退启发式（在动作后插审核 / 按名删除），识别不到时返回原图，绝不报错。
 
+### 6.（L3）运行后自省（结果 vs goal → 薄弱点 + 改进建议）
+```
+POST /api/flows/selfreview
+body: { "goal": "…", "nodes": [...], "edges": [...],
+        "results": { "<nodeId>": {status, summary, detail, score}, ... } }
+resp: { "ok": true,
+        "weak": [ {node_id, severity(high|medium|low), issue}, ... ],
+        "assessment": "运行完成，发现以下可改进点：…",
+        "suggestion_intent": "把「审核把关」这个审核改得更严一点" }
+```
+运行后把**结果对比 goal**，找出薄弱点（低分审核 / 未经审核的动作 / 缺汇总 / 起点无目标），
+并产出**可执行的 suggestion_intent**——可直接喂给 `/flows/tweak` 形成闭环（自省→改进→重跑）。
+
 ---
 
 ## 画布持久化

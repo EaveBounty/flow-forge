@@ -389,6 +389,10 @@
       var data = await resp.json();
       if (!data || !data.ok) throw new Error((data && data.error) || '运行失败');
       await runVisualization(data.results || {}, data.outputs || {});
+      // L3：运行后自省（结果 vs goal → 建议条 → 可一键喂给 tweak）
+      try {
+        if (typeof wf.runSelfReview === 'function') wf.runSelfReview(data.results || {}, data.outputs || {});
+      } catch (e) { /* 静默 */ }
     } catch (err) {
       toast('运行失败：' + (err && err.message ? err.message : String(err)), 'error');
       emit('run-end', { error: err && err.message ? err.message : String(err) });
